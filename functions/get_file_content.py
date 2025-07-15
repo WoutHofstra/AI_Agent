@@ -1,6 +1,7 @@
 import os
 from config import MAX_CHARS
-
+from google import genai
+from google.genai import types
 
 def get_file_content(working_directory, file_path):
     abs_working_dir = os.path.abspath(working_directory)
@@ -19,3 +20,18 @@ def get_file_content(working_directory, file_path):
         return content
     except Exception as e:
         return f'Error reading file "{file_path}": {e}'
+
+schema_get_file_content = {
+    "name": "get_file_content",
+    "description": "Reads the content of a file.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "file_path": {
+                "type": "string",
+                "description": "The path to the file to read.",
+            }
+        },
+        "required": ["file_path"],
+    },
+}
