@@ -8,6 +8,9 @@ from functions.get_file_content import *
 from functions.write_file import *
 from functions.run_python import *
 from functions.call_function import *
+from config import MAX_ITERS
+
+
 
 load_dotenv()
 api_key = os.environ.get("GEMINI_API_KEY")
@@ -52,34 +55,54 @@ available_functions = types.Tool(
 )
 
 def main():
+    for step in range(20):  # Max 20 iterations
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.0-flash-001',
+                contents=messages,
+                config=types.GenerateContentConfig(
+                    tools=[available_functions],
+                    system_instruction=types.Content(
+                        role="system",
+                        parts=[types.Part(text=system_prompt)]
+                    ),
+                ),
+            )
 
-	response = client.models.generate_content(
-		model = 'gemini-2.0-flash-001',
-		contents = messages,
-		config=types.GenerateContentConfig(tools=[available_functions], system_instruction=system_prompt),
-	)
+            # Add model response to messages
+            for candidate in response.candidates:
+                messages.append(types.Content(role="model", parts=[types.Part(text=candidate.content.text)]))
 
-	if response.function_calls:
-		for function_call_part in response.function_calls:
-			function_call_result=call_function(function_call_part, verbose=is_verbose)
+            # If model wants to use a tool
+            if response.function_calls:
+                for function_call_part in response.function_calls:
+                    function_response = call_function(function_call_part, verbose=is_verbose)
 
-			if not function_call_result.parts[0].function_response.response:
-				raise Exception("Function call failed to return proper response")
-			if is_verbose:
-				print(f'-> {function_call_result.parts[0].function_response.response}')
+                    for candidate in response.candidates:
+                        for part in candidate.content.parts:
+                            if hasattr(part, "text"):
+                                print("Model:", part.text)
+                                break
 
-	else:
-		print(response.text)
+                    if is_verbose:
+                        print(f"Function call: {function_call_part.name}")
+                        print(f"Arguments: {function_call_part.args}")
+                        print(f"Tool output: {function_response.parts[0].function_response.response}")
+            else:
+                # No more tool use; final response
+                for candidate in response.candidates:
+                    for part in candidate.content.parts:
+                        if hasattr(part, "text"):
+                            print("Model:", answer_text)
+                break
 
-	prompt_tokens = response.usage_metadata.prompt_token_count
-	response_tokens = response.usage_metadata.candidates_token_count
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            break
 
-
-	if is_verbose:
-		print(f"User prompt: {prompt}")
-		print(f"Prompt tokens: {prompt_tokens}")
-		print(f"Response tokens: {response_tokens}")
-
+    if is_verbose and response.usage_metadata:
+        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
 
 if __name__ == "__main__":
     main()
